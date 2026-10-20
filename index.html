@@ -49,6 +49,30 @@ button:active{ transform:translateY(0); }
 .stats b{ display:block; color:#fff; font-size:22px; margin-bottom:6px; font-variant-numeric:tabular-nums; }
 .record{ display:inline-block; padding:5px 14px; border-radius:999px; font-size:12px; font-weight:700; color:#04121a;
   background:linear-gradient(90deg,var(--cyan),var(--mag)); }
+.btns{ display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+button.ghost{ background:transparent; color:rgba(232,246,255,.72); border:1px solid rgba(255,255,255,.16); box-shadow:none; }
+button.ghost:hover{ background:rgba(255,255,255,.06); color:#fff; box-shadow:none; }
+.chips{ display:flex; gap:8px; justify-content:center; margin:16px 0 8px; }
+.chip{ font:600 12px/1 inherit; padding:9px 16px; border-radius:999px; border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.05); color:rgba(232,246,255,.62); cursor:pointer; box-shadow:none; }
+.chip:hover{ color:#fff; border-color:rgba(255,255,255,.32); box-shadow:none; transform:none; }
+.chip.on{ color:#04121a; border-color:transparent; background:linear-gradient(100deg,var(--cyan),#9ef4ff 45%,var(--mag)); }
+.settings h1{ font-size:clamp(30px,6vw,44px); }
+.setrow{ display:grid; grid-template-columns:84px 1fr 64px; align-items:center; gap:14px; margin:16px 0; text-align:left; }
+.setrow label{ font-size:13px; color:rgba(232,246,255,.75); }
+.setrow output{ font:600 13px ui-monospace,Consolas,monospace; color:#fff; text-align:right; font-variant-numeric:tabular-nums; }
+input[type=range]{ -webkit-appearance:none; appearance:none; width:100%; height:4px; border-radius:999px; outline:none;
+  background:linear-gradient(90deg,var(--cyan),var(--mag)); opacity:.9; }
+input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:16px; height:16px; border-radius:50%;
+  background:#fff; border:none; box-shadow:0 0 14px rgba(255,255,255,.6); cursor:pointer; }
+input[type=range]::-moz-range-thumb{ width:16px; height:16px; border-radius:50%; background:#fff; border:none; cursor:pointer; }
+.palettes{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin:24px 0 8px; }
+.pal{ width:64px; height:32px; border-radius:9px; padding:0; display:flex; overflow:hidden;
+  border:1px solid rgba(255,255,255,.16); box-shadow:none; cursor:pointer; }
+.pal i{ flex:1; }
+.pal:hover{ transform:none; box-shadow:none; }
+.pal.on{ outline:2px solid #fff; outline-offset:2px; }
+.palname{ font-size:12px; color:rgba(255,255,255,.42); margin:0 0 22px; }
 </style>
 </head>
 <body>
@@ -63,21 +87,57 @@ const ctx = cv.getContext('2d', { alpha:false });
 const ui = document.getElementById('ui');
 
 const TAU = Math.PI * 2;
-const MAXC = 24;                 // 能量上限
 const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
 const rand = (a,b) => a + Math.random() * (b - a);
 const lerp = (a,b,t) => a + (b - a) * t;
 const hyp = (x,y) => Math.sqrt(x*x + y*y);
 
-const COLS = [
-  { hex:'#45f2ff', rgb:'69,242,255',  light:'#dcfdff' },
-  { hex:'#ff45cf', rgb:'255,69,207',  light:'#ffd9f7' }
+/* ==== 配色方案 ==== */
+const PALETTES = [
+  { name:'青 × 品红', cols:[
+    { hex:'#45f2ff', rgb:'69,242,255',  light:'#dcfdff' },
+    { hex:'#ff45cf', rgb:'255,69,207',  light:'#ffd9f7' } ] },
+  { name:'冰蓝 × 橙', cols:[
+    { hex:'#4fc3ff', rgb:'79,195,255',  light:'#e0f4ff' },
+    { hex:'#ffa04d', rgb:'255,160,77',  light:'#ffe9d1' } ] },
+  { name:'薄荷 × 紫', cols:[
+    { hex:'#3dffc0', rgb:'61,255,192',  light:'#d8fff1' },
+    { hex:'#b06bff', rgb:'176,107,255', light:'#ecdcff' } ] },
+  { name:'金 × 玫红', cols:[
+    { hex:'#ffd166', rgb:'255,209,102', light:'#fff6d8' },
+    { hex:'#ff4d6d', rgb:'255,77,109',  light:'#ffd9df' } ] },
+  { name:'珊瑚 × 湖蓝', cols:[
+    { hex:'#ff6b6b', rgb:'255,107,107', light:'#ffdede' },
+    { hex:'#4dd0e1', rgb:'77,208,225',  light:'#dbfff7' } ] },
+  { name:'柠檬 × 蓝紫', cols:[
+    { hex:'#e8ff59', rgb:'232,255,89',  light:'#fbffd6' },
+    { hex:'#7b7bff', rgb:'123,123,255', light:'#dedeff' } ] }
 ];
+
+/* ==== 设置（自动保存） ==== */
+const DEFAULTS = { bulletSpeed:1, enemyRate:1, maxCharge:24, palette:0 };
+const SET = Object.assign({}, DEFAULTS);
+try {
+  const saved = JSON.parse(localStorage.getItem('polarity.settings') || 'null');
+  if (saved && typeof saved === 'object'){
+    for (const k of Object.keys(DEFAULTS)) if (saved[k] != null) SET[k] = saved[k];
+  }
+} catch(e){}
+SET.bulletSpeed = clamp(+SET.bulletSpeed || 1, 0.6, 1.6);
+SET.enemyRate   = clamp(+SET.enemyRate || 1, 0.5, 2);
+SET.maxCharge   = clamp(Math.round(+SET.maxCharge || 24), 8, 40);
+SET.palette     = clamp(Math.round(+SET.palette || 0), 0, PALETTES.length - 1);
+function saveSettings(){
+  try { localStorage.setItem('polarity.settings', JSON.stringify(SET)); } catch(e){}
+}
+
+let MAXC = SET.maxCharge;                                  // 能量上限（可调）
+const COLS = PALETTES[SET.palette].cols.map(c => Object.assign({}, c));
 
 let W = window.innerWidth, H = window.innerHeight, DPR = 1, vignette = null;
 
 /* ==== 光晕贴图（预渲染，保证性能） ==== */
-const sprites = COLS.map(c => {
+function glowSprite(c){
   const S = 128, cn = document.createElement('canvas');
   cn.width = cn.height = S;
   const g = cn.getContext('2d');
@@ -88,7 +148,20 @@ const sprites = COLS.map(c => {
   g.fillStyle = gr;
   g.fillRect(0, 0, S, S);
   return cn;
-});
+}
+let sprites = COLS.map(glowSprite);
+function applyPalette(){
+  const src = PALETTES[SET.palette] || PALETTES[0];
+  for (let i = 0; i < 2; i++){
+    COLS[i].hex   = src.cols[i].hex;
+    COLS[i].rgb   = src.cols[i].rgb;
+    COLS[i].light = src.cols[i].light;
+  }
+  sprites = COLS.map(glowSprite);
+  document.documentElement.style.setProperty('--cyan', COLS[0].hex);
+  document.documentElement.style.setProperty('--mag', COLS[1].hex);
+}
+applyPalette();
 function glow(x, y, rad, pol, alpha){
   if (rad <= 0 || alpha <= 0) return;
   ctx.globalAlpha = clamp(alpha, 0, 1);
@@ -154,7 +227,8 @@ function addFloat(x, y, text, pol){
 /* ==== 子弹 ==== */
 function spawnBullet(x, y, ang, spd, pol, r){
   if (bullets.length > 380) return;
-  bullets.push({ x, y, px:x, py:y, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd, pol, r:r||4.6, life:10, dead:false });
+  const v = spd * SET.bulletSpeed;
+  bullets.push({ x, y, px:x, py:y, vx:Math.cos(ang)*v, vy:Math.sin(ang)*v, pol, r:r||4.6, life:10, dead:false });
 }
 function spawnAmbient(){
   const edge = Math.floor(Math.random()*4);
@@ -262,7 +336,7 @@ function flip(){
 function resetGame(){
   G.state = 'play'; G.t = 0; G.score = 0; G.hearts = 3; G.streak = 0; G.combo = 1; G.absorbs = 0;
   G.shake = 0; G.hitFlash = 0; G.spawnT = 1.2; G.ambT = 0.5; G.spawnN = 0;
-  G.deadT = 0; G.overShown = false;
+  G.deadT = 0; G.overShown = false; G.recSet = false; G.rec = false;
   p.x = W/2; p.y = H/2; p.vx = p.vy = 0; p.pol = 0; p.charges = 0;
   p.inv = 1.5; p.flipCd = 0; p.angle = 0; p.trail.length = 0;
   mouse.x = W/2; mouse.y = H/2; usingKeys = false;
@@ -355,10 +429,11 @@ function updatePlayer(dt){
 function updateSpawn(dt){
   const diff = clamp(G.t/110, 0, 1);
   G.spawnT -= dt;
-  const maxE = 2 + Math.floor(diff * 5);
+  const rate = Math.max(0.4, SET.enemyRate);
+  const maxE = Math.max(1, Math.round((2 + Math.floor(diff * 5)) * rate));
   if (G.spawnT <= 0 && enemies.length < maxE){
     spawnEnemy();
-    G.spawnT = lerp(4.4, 1.6, diff) * rand(0.85, 1.25);
+    G.spawnT = lerp(4.4, 1.6, diff) / rate * rand(0.85, 1.25);
   }
   G.ambT -= dt;
   if (G.ambT <= 0 && bullets.length < 250){
@@ -710,6 +785,103 @@ function render(){
 }
 
 /* ==== 界面（HTML 覆盖层） ==== */
+let settingsBack = null;
+const PRESETS = {
+  easy:   { bulletSpeed:0.8, enemyRate:0.7, maxCharge:32 },
+  normal: { bulletSpeed:1.0, enemyRate:1.0, maxCharge:24 },
+  hard:   { bulletSpeed:1.3, enemyRate:1.5, maxCharge:16 }
+};
+function settingsHTML(){
+  const s = SET;
+  const pals = PALETTES.map((pl, i) =>
+    '<button class="pal' + (i === s.palette ? ' on' : '') + '" data-pal="' + i + '" title="' + pl.name + '">' +
+      '<i style="background:' + pl.cols[0].hex + '"></i><i style="background:' + pl.cols[1].hex + '"></i>' +
+    '</button>').join('');
+  const isPreset = pr => Math.abs(s.bulletSpeed - pr.bulletSpeed) < 0.001 &&
+                         Math.abs(s.enemyRate - pr.enemyRate) < 0.001 &&
+                         s.maxCharge === pr.maxCharge;
+  const chip = (key, label) =>
+    '<button class="chip' + (isPreset(PRESETS[key]) ? ' on' : '') + '" data-preset="' + key + '">' + label + '</button>';
+  return '<div class="panel settings">' +
+    '<div class="kicker">Settings</div>' +
+    '<h1>设置<span>SETTINGS</span></h1>' +
+    '<div class="chips">' + chip('easy','休闲') + chip('normal','标准') + chip('hard','疯狂') + '</div>' +
+    '<div class="setrow"><label>子弹速度</label><input id="sSpeed" type="range" min="60" max="160" step="5" value="' + Math.round(s.bulletSpeed*100) + '"><output id="oSpeed">' + s.bulletSpeed.toFixed(2) + '×</output></div>' +
+    '<div class="setrow"><label>敌人数量</label><input id="sEnemy" type="range" min="50" max="200" step="10" value="' + Math.round(s.enemyRate*100) + '"><output id="oEnemy">' + s.enemyRate.toFixed(1) + '×</output></div>' +
+    '<div class="setrow"><label>能量上限</label><input id="sCharge" type="range" min="8" max="40" step="2" value="' + s.maxCharge + '"><output id="oCharge">' + s.maxCharge + '</output></div>' +
+    '<div class="palettes">' + pals + '</div>' +
+    '<p class="palname">配色：' + PALETTES[s.palette].name + '</p>' +
+    '<div class="btns"><button id="backBtn">返 回</button><button id="resetBtn" class="ghost">恢复默认</button></div>' +
+    '<p class="small">改动即时生效并自动保存 · Tab 打开 / 关闭</p>' +
+  '</div>';
+}
+function openSettings(back){
+  settingsBack = back;
+  ui.innerHTML = settingsHTML();
+  ui.classList.add('show');
+  bindSettings();
+}
+function closeSettings(){
+  if (!settingsBack) return;
+  const back = settingsBack;
+  settingsBack = null;
+  back();
+}
+function refreshSettings(){
+  const back = settingsBack;
+  settingsBack = null;
+  if (back) openSettings(back);
+}
+function bindSettings(){
+  const range = (id, outId, apply, fmt) => {
+    const el = document.getElementById(id), out = document.getElementById(outId);
+    if (!el) return;
+    el.oninput = () => {
+      apply(+el.value);
+      if (out) out.textContent = fmt();
+      saveSettings();
+    };
+  };
+  range('sSpeed', 'oSpeed', v => { SET.bulletSpeed = v/100; }, () => SET.bulletSpeed.toFixed(2) + '×');
+  range('sEnemy', 'oEnemy', v => { SET.enemyRate = v/100; }, () => SET.enemyRate.toFixed(1) + '×');
+  range('sCharge', 'oCharge', v => {
+    SET.maxCharge = v; MAXC = v;
+    if (p.charges > MAXC) p.charges = MAXC;
+  }, () => String(SET.maxCharge));
+
+  document.querySelectorAll('.pal').forEach(el => {
+    el.onclick = () => {
+      SET.palette = +el.dataset.pal;
+      applyPalette();
+      saveSettings();
+      refreshSettings();
+    };
+  });
+  document.querySelectorAll('.chip').forEach(el => {
+    el.onclick = () => {
+      const pr = PRESETS[el.dataset.preset];
+      if (pr){
+        Object.assign(SET, pr);
+        MAXC = SET.maxCharge;
+        if (p.charges > MAXC) p.charges = MAXC;
+        applyPalette();
+        saveSettings();
+      }
+      refreshSettings();
+    };
+  });
+  const back = document.getElementById('backBtn');
+  if (back) back.onclick = closeSettings;
+  const reset = document.getElementById('resetBtn');
+  if (reset) reset.onclick = () => {
+    Object.assign(SET, DEFAULTS);
+    MAXC = SET.maxCharge;
+    if (p.charges > MAXC) p.charges = MAXC;
+    applyPalette();
+    saveSettings();
+    refreshSettings();
+  };
+}
 function showTitle(){
   G.state = 'title';
   ui.innerHTML =
@@ -723,12 +895,14 @@ function showTitle(){
         '<div><i class="dot mag"></i><b>空格 / 点击</b><span>换色，并引爆所有能量</span></div>' +
       '</div>' +
       '<p class="note">异色子弹会扣血；爆发颜色与敌人相反时伤害 ×2。<br>能量越多，冲击波越大。击杀敌人回复 2 点能量。</p>' +
-      '<button id="startBtn">开 始</button>' +
-      '<p class="small">最高分 ' + G.best + '</p>' +
+      '<div class="btns"><button id="startBtn">开 始</button><button id="settingsBtn" class="ghost">设 置</button></div>' +
+      '<p class="small">最高分 ' + G.best + ' · Tab 打开设置</p>' +
     '</div>';
   ui.classList.add('show');
   const btn = document.getElementById('startBtn');
   if (btn) btn.onclick = startGame;
+  const sbtn = document.getElementById('settingsBtn');
+  if (sbtn) sbtn.onclick = () => openSettings(showTitle);
 }
 function showPause(){
   ui.innerHTML =
@@ -736,19 +910,24 @@ function showPause(){
       '<div class="kicker">Paused</div>' +
       '<h1>暂停<span>PAUSED</span></h1>' +
       '<p class="lead">深呼吸，然后继续。</p>' +
-      '<button id="resumeBtn">继 续</button>' +
+      '<div class="btns"><button id="resumeBtn">继 续</button><button id="settingsBtn" class="ghost">设 置</button></div>' +
       '<p class="small">P / ESC 继续 · R 重开 · M 静音</p>' +
     '</div>';
   ui.classList.add('show');
   const btn = document.getElementById('resumeBtn');
   if (btn) btn.onclick = togglePause;
+  const sbtn = document.getElementById('settingsBtn');
+  if (sbtn) sbtn.onclick = () => openSettings(() => { G.state = 'pause'; showPause(); });
 }
 function showGameOver(){
   G.overShown = true;
-  const rec = G.score > G.best;
-  if (rec){
-    G.best = G.score;
-    try { localStorage.setItem('polarity.best', String(G.best)); } catch(e){}
+  if (!G.recSet){
+    G.recSet = true;
+    G.rec = G.score > G.best;
+    if (G.rec){
+      G.best = G.score;
+      try { localStorage.setItem('polarity.best', String(G.best)); } catch(e){}
+    }
   }
   ui.innerHTML =
     '<div class="panel">' +
@@ -759,13 +938,15 @@ function showGameOver(){
         '<div><b>' + G.absorbs + '</b>吸收</div>' +
         '<div><b>' + G.best + '</b>最高</div>' +
       '</div>' +
-      (rec ? '<span class="record">新纪录</span>' : '') +
-      '<div style="margin-top:22px"><button id="againBtn">再来一局</button></div>' +
+      (G.rec ? '<span class="record">新纪录</span>' : '') +
+      '<div class="btns" style="margin-top:22px"><button id="againBtn">再来一局</button><button id="settingsBtn" class="ghost">设 置</button></div>' +
       '<p class="small">R / 空格 重开 · M 静音</p>' +
     '</div>';
   ui.classList.add('show');
   const btn = document.getElementById('againBtn');
   if (btn) btn.onclick = startGame;
+  const sbtn = document.getElementById('settingsBtn');
+  if (sbtn) sbtn.onclick = () => openSettings(() => { G.state = 'dead'; showGameOver(); });
 }
 function startGame(){
   ensureAudio();
@@ -798,6 +979,20 @@ window.addEventListener('keydown', e => {
   ensureAudio();
   const k = e.key.toLowerCase();
   if (k === ' ') e.preventDefault();
+  if (settingsBack){
+    if (k === 'escape' || k === 'tab' || k === 'backspace'){ e.preventDefault(); closeSettings(); }
+    return;
+  }
+  if (k === 'tab'){
+    e.preventDefault();
+    if (G.state === 'title') openSettings(showTitle);
+    else if (G.state === 'pause') openSettings(() => { G.state = 'pause'; showPause(); });
+    else if (G.state === 'play'){
+      G.state = 'pause';
+      openSettings(() => { G.state = 'play'; ui.classList.remove('show'); ui.innerHTML = ''; lastTs = 0; });
+    }
+    return;
+  }
   if (k === 'm'){ toggleMute(); return; }
   if (G.state === 'play'){
     if (k === ' ') flip();
